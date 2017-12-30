@@ -1,5 +1,5 @@
 #
-# Simple LSTM with use of Tensorflow API.
+# Simple LSTM without using Tensorflow API
 #
 
 import matplotlib.pyplot as plt
@@ -11,7 +11,7 @@ from tqdm import trange
 batch_size = 32
 series_size = 16
 num_batches = 1000
-num_epochs = 5
+num_epochs = 4
 total_sequence_size = num_batches * batch_size * series_size
 state_size = 128
 offset = 5
@@ -39,23 +39,46 @@ def build_model():
     model = SmartDict()
 
     model.x_placeholder = tf.placeholder(
-        tf.float32, shape=[batch_size, series_size])
+        tf.float32, shape=[batch_size, series_size], name="x_placeholder")
     model.y_placeholder = tf.placeholder(
-        tf.int32, shape=[batch_size, series_size])
+        tf.int32, shape=[batch_size, series_size], name="y_placeholder")
 
-    model.h_placeholder = tf.placeholder(
-        tf.float32, shape=[batch_size, state_size])
-    model.c_placeholder = tf.placeholder(
-        tf.float32, shape=[batch_size, state_size])
-    model.init_state = tf.nn.rnn_cell.LSTMStateTuple(
-    	model.c_placeholder, model.h_placeholder)
+    model.hidden_state = tf.placeholder(
+        tf.float32, shape=[batch_size, state_size], name="hidden_state")
+    model.cell_state = tf.placeholder(
+        tf.float32, shape=[batch_size, state_size], name="cell_state")
 
-    model.inputs_series = tf.split(model.x_placeholder, series_size, axis=1)
+    model.inputs_series = tf.unstack(model.x_placeholder, axis=1)
     model.labels_series = tf.unstack(model.y_placeholder, axis=1)
 
-    cell = tf.nn.rnn_cell.BasicLSTMCell(state_size, state_is_tuple=True)
-    model.states, model.current_state = tf.nn.static_rnn(
-    		cell, model.inputs_series, model.init_state)
+    model.W = tf.get_variable(
+        name="W", 
+        shape=(1+state_size, 4*state_size),
+        initializer=tf.random_uniform_initializer(-0.05, 0.05))
+    model.b = tf.get_variable(
+        name="b", 
+        shape=(1, 4*state_size),
+        initializer=tf.constant_initializer(1.0))
+
+    model.current_state = (model.cell_state, model.hidden_state)
+    model.states = []
+
+    with tf.variable_scope("lstm_cell"):
+      for current_input in model.inputs_series:
+        current_input = tf.reshape(current_input, [batch_size, 1])
+
+        c, h = model.current_state 
+
+        forget, input, candidate, output = tf.split(
+            tf.matmul(tf.concat([h, current_input], 1), model.W) + model.b, 
+            num_or_size_splits=4, axis=1)
+
+        c = tf.nn.sigmoid(forget) * c + \
+            tf.nn.sigmoid(input) * tf.tanh(candidate)
+        h = tf.tanh(c) * tf.nn.sigmoid(output)
+
+        model.current_state = (c, h)
+        model.states.append(h)
 
     model.W2 = tf.get_variable("W2", shape=(state_size, num_classes))
     model.b2 = tf.get_variable("b2", shape=(1, num_classes))
@@ -69,7 +92,11 @@ def build_model():
         logits=logits, labels=labels)
         for logits, labels in zip(model.logits_series, model.labels_series)]
     model.total_loss = tf.reduce_mean(model.losses)
-    model.opt = tf.train.AdagradOptimizer(0.1).minimize(model.total_loss)
+    model.opt = tf.train.AdagradOptimizer(1e-1).minimize(model.total_loss)
+
+    model.writer = tf.summary.FileWriter(
+        "lstm", tf.get_default_graph(), flush_secs=5)
+    model.writer.flush()
 
     return model
 
@@ -81,7 +108,7 @@ def main():
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
-        average_loss = 1e9
+        average_loss = 1e3
         saved_predictions = None
         x, y = get_data()
 
@@ -104,8 +131,8 @@ def main():
                     feed_dict={
                         model.x_placeholder: batch_x,
                         model.y_placeholder: batch_y,
-                        model.c_placeholder: cell_state,
-                        model.h_placeholder: hidden_state,
+                        model.cell_state: cell_state,
+                        model.hidden_state: hidden_state,
                     })
                 cell_state, hidden_state = current_state
 
