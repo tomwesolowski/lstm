@@ -1,2 +1,2 @@
-# simple-rnn
-"Hello world" RNN based on tutorial: https://goo.gl/v7YR6k
+# Simple LSTM
+"Hello world" RNN/LSTM networks based on Erik Hallström's tutorial: https://goo.gl/v7YR6k
