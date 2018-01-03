@@ -17,7 +17,7 @@ num_epochs = 3
 total_sequence_size = num_batches * batch_size * series_size
 state_size = 128
 offset = 5
-num_classes = 2
+num_classes = 4
 plot_width, plot_height = 20, 20
 use_peephole = True
 cell_clip = 5.0 # disabled if None 
@@ -33,7 +33,7 @@ def get_date():
     return datetime.datetime.now().strftime('%02m-%02d_%02H-%02M-%02S')
 
 def get_data():
-    x = np.random.choice(2, total_sequence_size)
+    x = np.random.choice(num_classes, total_sequence_size)
     y = np.roll(x, offset)
     y[:offset] = 0
 
