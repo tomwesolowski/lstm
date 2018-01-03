@@ -37,6 +37,11 @@ def get_data():
 
 
 def build_model():
+  def _get_cell():
+    cell = tf.nn.rnn_cell.LSTMCell(state_size, state_is_tuple=True)
+    cell = tf.nn.rnn_cell.DropoutWrapper(cell, output_keep_prob=0.9)
+    return cell
+
   model = SmartDict()
 
   model.x_placeholder = tf.placeholder(
@@ -54,7 +59,7 @@ def build_model():
   )
 
   model.cell = tf.nn.rnn_cell.MultiRNNCell(
-      [tf.nn.rnn_cell.LSTMCell(state_size, state_is_tuple=True) for _ in range(num_layers)], state_is_tuple=True)
+      [_get_cell() for _ in range(num_layers)], state_is_tuple=True)
   model.states, model.current_state = tf.nn.dynamic_rnn(
       model.cell, tf.expand_dims(model.x_placeholder, -1), initial_state=model.tuples_states)
 
